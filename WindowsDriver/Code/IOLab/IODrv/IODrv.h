@@ -18,28 +18,63 @@ extern "C"
 #define INITDATA data_seg("INIT")
 
 
-#define IOCTL_READ_PORT     CTL_CODE( \
-                            FILE_DEVICE_UNKNOWN, \
-                            0x800, \
-                            METHOD_BUFFERED, \
-                            FILE_ANY_ACCESS)
+#pragma region IOCTL Code
+
+#define IOCTL_READ_PORT         CTL_CODE( \
+                                FILE_DEVICE_UNKNOWN, \
+                                0x800, \
+                                METHOD_BUFFERED, \
+                                FILE_ANY_ACCESS)
 
 
-#define IOCTL_WRITE_PORT    CTL_CODE( \
-                            FILE_DEVICE_UNKNOWN, \
-                            0x800 + 1, \
-                            METHOD_BUFFERED, \
-                            FILE_ANY_ACCESS)
+#define IOCTL_WRITE_PORT        CTL_CODE( \
+                                FILE_DEVICE_UNKNOWN, \
+                                0x800 + 1, \
+                                METHOD_BUFFERED, \
+                                FILE_ANY_ACCESS)
+
+
+#define IOCTL_READ_REGISTER     CTL_CODE( \
+                                FILE_DEVICE_UNKNOWN, \
+                                0x800 + 2, \
+                                METHOD_BUFFERED, \
+                                FILE_ANY_ACCESS)
+
+
+#define IOCTL_WRITE_REGISTER    CTL_CODE( \
+                                FILE_DEVICE_UNKNOWN, \
+                                0x800 + 3, \
+                                METHOD_BUFFERED, \
+                                FILE_ANY_ACCESS)
+
+#pragma endregion
 
 
 
-
+// Port
 typedef struct _PORT_STRUCT
 {
     USHORT  wPort;
     ULONG   dwPortVal;
     UCHAR   ucSize;
 } PORT_STRUCT, PPORT_STRUCT;
+
+
+// Register
+union REG_DATA
+{
+    ULONG32 ulData;
+    USHORT  usData;
+    UCHAR   ucData;
+};
+
+typedef struct _REG_STRUCT
+{
+    ULONG64 ullAddress;
+    REG_DATA reg;
+    UCHAR   ucSize;
+
+} REG_STRUCT, *PREG_STRUCT;
 
 
 

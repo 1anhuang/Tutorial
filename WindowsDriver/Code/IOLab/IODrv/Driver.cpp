@@ -112,6 +112,7 @@ NTSTATUS IODrvDefaultDispatch(
 }
 
 
+
 NTSTATUS IODrvIOControl(
     IN PDEVICE_OBJECT   pDevObj,
     IN PIRP             pIRP
@@ -128,6 +129,9 @@ NTSTATUS IODrvIOControl(
     PVOID pvIOBuf = (PULONG)pIRP->AssociatedIrp.SystemBuffer;
 
     PORT_STRUCT portStruct = { 0 };
+    REG_STRUCT regStruct = { 0 };
+    PHYSICAL_ADDRESS physAddress = { 0 };
+    PVOID virtualAddress = NULL;
 
 
     switch (ulCode)
@@ -136,11 +140,9 @@ NTSTATUS IODrvIOControl(
 
         DbgPrint("[IODrvIOControl INFO]: IOCTL_READ_PORT Enter");
 
-        if (pvIOBuf)
+        if (ulInLen == sizeof(PORT_STRUCT))
         {
-            memcpy_s(&portStruct, sizeof(PORT_STRUCT), pvIOBuf, min(sizeof(PORT_STRUCT), ulInLen));
-
-            DbgPrint("[IODrvIOControl INFO]: size=%d, port=%04X", portStruct.ucSize, portStruct.wPort);
+            memcpy_s(&portStruct, sizeof(PORT_STRUCT), pvIOBuf, sizeof(PORT_STRUCT));
 
             switch (portStruct.ucSize)
             {
@@ -169,11 +171,12 @@ NTSTATUS IODrvIOControl(
         DbgPrint("[IODrvIOControl INFO]: IOCTL_READ_PORT End");
 
         break;
+
     case IOCTL_WRITE_PORT:
 
-        if (pvIOBuf)
+        if (ulInLen == sizeof(PORT_STRUCT))
         {
-            memcpy_s(&portStruct, sizeof(PORT_STRUCT), pvIOBuf, min(sizeof(PORT_STRUCT), ulInLen));
+            memcpy_s(&portStruct, sizeof(PORT_STRUCT), pvIOBuf, sizeof(PORT_STRUCT));
 
             switch (portStruct.ucSize)
             {
@@ -194,7 +197,99 @@ NTSTATUS IODrvIOControl(
             }
         }
         break;
+
+    case IOCTL_READ_REGISTER:
+
+        DbgPrint("[IODrvIOControl INFO]: IOCTL_READ_REGISTER Enter");
+
+        if (ulInLen == sizeof(REG_STRUCT))
+        {
+            memcpy_s(&regStruct, sizeof(REG_STRUCT), pvIOBuf, sizeof(REG_STRUCT));
+
+            // Map physical memory to virtual memory
+            physAddress.QuadPart = regStruct.ullAddress;
+            virtualAddress = MmMapIoSpace(physAddress, regStruct.ucSize, MmNonCached);
+
+            if (virtualAddress != NULL)
+            {
+                switch (regStruct.ucSize)
+                {
+                case 1:
+                    regStruct.reg.ucData = READ_REGISTER_UCHAR((PUCHAR)virtualAddress);
+                    ulInfo = sizeof(REG_STRUCT);
+                    status = STATUS_SUCCESS;
+                    break;
+                case 2:
+                    regStruct.reg.usData = READ_REGISTER_USHORT((PUSHORT)virtualAddress);
+                    ulInfo = sizeof(REG_STRUCT);
+                    status = STATUS_SUCCESS;
+                    break;
+                case 4:
+                    regStruct.reg.ulData = READ_REGISTER_ULONG((PULONG)virtualAddress);
+                    ulInfo = sizeof(REG_STRUCT);
+                    status = STATUS_SUCCESS;
+                    break;
+                default:
+                    break;
+                }
+
+                // Unmap virtual memory
+                MmUnmapIoSpace(virtualAddress, regStruct.ucSize);
+
+                memcpy_s(pvIOBuf, ulOutLen, &regStruct, min(ulOutLen, sizeof(REG_STRUCT)));
+            }
+            else
+            {
+                DbgPrint("[IODrvIOControl INFO]: IOCTL_READ_REGISTER => MmMapIoSpace == NULL");
+            }
+        }
+
+        DbgPrint("[IODrvIOControl INFO]: IOCTL_READ_REGISTER End");
+
+        break;
+
+
+    case IOCTL_WRITE_REGISTER:
+
+        if (ulInLen == sizeof(REG_STRUCT))
+        {
+            memcpy_s(&regStruct, sizeof(REG_STRUCT), pvIOBuf, sizeof(REG_STRUCT));
+
+            // Map physical memory to virtual memory
+            physAddress.QuadPart = regStruct.ullAddress;
+            virtualAddress = MmMapIoSpace(physAddress, regStruct.ucSize, MmNonCached);
+
+            if (virtualAddress != NULL)
+            {
+                switch (regStruct.ucSize)
+                {
+                case 1:
+                    WRITE_REGISTER_UCHAR((PUCHAR)regStruct.ullAddress, regStruct.reg.ucData);
+                    status = STATUS_SUCCESS;
+                    break;
+                case 2:
+                    WRITE_REGISTER_USHORT((PUSHORT)regStruct.ullAddress, regStruct.reg.usData);
+                    status = STATUS_SUCCESS;
+                    break;
+                case 4:
+                    WRITE_REGISTER_ULONG((PULONG)regStruct.ullAddress, regStruct.reg.ulData);
+                    status = STATUS_SUCCESS;
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            // Unmap virtual memory
+            MmUnmapIoSpace(virtualAddress, regStruct.ucSize);
+        }
+        else
+        {
+            DbgPrint("[IODrvIOControl INFO]: IOCTL_WRITE_REGISTER => MmMapIoSpace == NULL");
+        }
+        break;
     }
+    
 
     pIRP->IoStatus.Status = status;
     pIRP->IoStatus.Information = ulInfo;
